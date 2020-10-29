@@ -12,12 +12,13 @@ export VL, quantitative, ordinal, temporal, nominal
 ## the structure
 
 const Values    = Union{String, Symbol, Number, Nothing}
-const VecValues = Union{Values, Vector, NamedTuples, VL}
 
 struct VL
   payload::Trie{Union{Values, Vector}}
 end
 VL() = VL(Trie{Union{Values, Vector}}())
+
+const VecValues = Union{Values, Vector, NamedTuple, VL}
 
 function VL(ps::Base.Iterators.Pairs)
   vl = VL( Trie{Union{Values, Vector}}() )
@@ -39,6 +40,8 @@ end
 VL(nt::NamedTuple) = VL(pairs(nt))
 VL(;pars...)       = VL(pairs(pars))
 
+
+include("io.jl")
 
 ## conversion to a tree (a dict of dicts)
 
@@ -69,9 +72,9 @@ function totree(vl::VL)
   kdict
 end
 
-function totree(v::Vector)
-  [ isa(e, Values) ? e : totree(e) for e in v  ]
-end
+totree(e::Values)     = e
+totree(e::NamedTuple) = e
+totree(v::Vector) = map(totree, v)
 
 ## functions amending the structure
 
