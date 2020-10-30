@@ -19,6 +19,11 @@ end
 
 const VecValues = Union{Values, Vector, NamedTuple, VL}
 
+# single arg case (not caught by named args function apparently)
+VL(vl::VL) = vl
+VL(nt::NamedTuple) = VL(;pairs(nt)...)
+
+# general constructor
 function VL(pargs...;nargs...)
 	all( isa.(pargs, Union{VL, NamedTuple}) ) ||
 		@error "non-named argument(s) not allowed"
@@ -33,7 +38,7 @@ function VL(pargs...;nargs...)
 
 	# add positional arguments (can be NamedTuples or VL only)
 	for pa in pargs
-		nvl = isa(pa, NamedTuple) ? VL(pairs(pa)) : pa
+		nvl = VL(pa) # force to VL if NamedTuple
 		for l1k in l1keys(nvl)
 			if haskey(nvl.payload, l1k)  # leaf
 				insert!(vl, l1k, nvl.payload[l1k])
@@ -100,6 +105,7 @@ end
 
 
 function Base.getproperty(vl::VL, sym::Symbol)
+	# treat VL fieldname :payload as it should
   (sym == :payload) && return getfield(vl, :payload)
 
   function (pargs...; nargs...)
@@ -119,7 +125,22 @@ function Base.getproperty(vl::VL, sym::Symbol)
   end
 end
 
-# Base.getproperty(::Type{VL}, sym::Symbol) = getproperty(VL(), sym)
+## make the VL().sym1().sym2() syntax also work for the VL type :
+#   VL.sym1().sym2()
+
+# forbidden symbols are the DataType symbols
+# :name, :super, :parameters, :types, :names, :instance, :layout, :size,
+# :ninitialized, :uid, :abstract, :mutable, :hasfreetypevars, :isconcretetype,
+# :isdispatchtuple, :isbitstype, :zeroinit, :isinlinealloc,
+# :has_concrete_subtype, Symbol("llvm::StructType"), Symbol("llvm::DIType"))
+
+function Base.getproperty(::Type{VL}, sym::Symbol)
+	# treat DataType fieldnames as usual
+  (sym in fieldnames(DataType)) && return getfield(vl, :payload)
+
+	# create new VL
+	getproperty(VL(), sym)
+end
 
 
 ## helper funcs
