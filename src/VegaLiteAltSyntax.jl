@@ -134,9 +134,9 @@ end
 # :isdispatchtuple, :isbitstype, :zeroinit, :isinlinealloc,
 # :has_concrete_subtype, Symbol("llvm::StructType"), Symbol("llvm::DIType"))
 
-function Base.getproperty(::Type{VL}, sym::Symbol)
+function Base.getproperty(vlt::Type{VL}, sym::Symbol)
 	# treat DataType fieldnames as usual
-  (sym in fieldnames(DataType)) && return getfield(vl, :payload)
+  (sym in fieldnames(DataType)) && return getfield(vlt, sym)
 
 	# create new VL
 	getproperty(VL(), sym)

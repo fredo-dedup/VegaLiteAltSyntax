@@ -5,7 +5,7 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ a1e1c328-1a02-11eb-2d14-9589688b268e
-using VegaLiteAltSyntax
+using VegaLiteAltSyntax 
 
 # ╔═╡ af76a2e2-1a02-11eb-0cd6-3768598c1a14
 begin
@@ -62,7 +62,7 @@ VL(width=600).
 	mark(type= :bar, 
 		line_color=:darkgreen,
 		stroke=:black, strokeSize=3,
-		VL().color(x1=1, y1=1, x2=1, y2=0, gradient=:linear,
+		VL.color(x1=1, y1=1, x2=1, y2=0, gradient=:linear,
 		 		stops=[(offset=0, color=:red), (offset=1, color=:darkgreen)])).
     data_values(dat).
     encoding_x(field=:x, bin=true ).
