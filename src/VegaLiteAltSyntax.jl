@@ -3,82 +3,70 @@ module VegaLiteAltSyntax
 using VegaLite
 
 
-import DataStructures: Trie, subtrie, partial_path, keys_with_prefix
-import Base: getproperty, show
+import DataStructures: Trie, subtrie, keys_with_prefix
+# import Base: getproperty, show
 
-export VL, quantitative, ordinal, temporal, nominal
+export VL, quantitative, ordinal, temporal, nominal, getproperty
 
 
-## the structure
+## the struct
 
 const Values    = Union{String, Symbol, Number, Nothing}
 
 struct VL
   payload::Trie{Union{Values, Vector}}
 end
-VL() = VL(Trie{Union{Values, Vector}}())
 
 const VecValues = Union{Values, Vector, NamedTuple, VL}
 
-function VL(ps::Base.Iterators.Pairs)
-  vl = VL( Trie{Union{Values, Vector}}() )
-  for (k,v) in ps
-    sk = String(k)
-    if isa(v, Values)
-      insert!(vl, sk, v)
-    elseif isa(v, Vector)
-      vs = VecValues[ isa(e,NamedTuple) ? VL(e) : e for e in v ]
-      insert!(vl, sk, vs)
-    else
-      insert!(vl, sk, VL(v))
-    end
-  end
-  vl
+function VL(pargs...;nargs...)
+	all( isa.(pargs, Union{VL, NamedTuple}) ) ||
+		@error "non-named argument(s) not allowed"
+
+	vl = VL( Trie{Union{Values, Vector}}() )
+
+	# add named arguments if any
+	for (k,v) in pairs(nargs)
+		insert!(vl, String(k), v)
+		# TODO : ensure vectors are VecValues[] ?
+	end
+
+	# add positional arguments (can be NamedTuples or VL only)
+	for pa in pargs
+		nvl = isa(pa, NamedTuple) ? VL(pairs(pa)) : pa
+		for l1k in l1keys(nvl)
+			if haskey(nvl.payload, l1k)  # leaf
+				insert!(vl, l1k, nvl.payload[l1k])
+			else  # branch
+				insert!(vl, l1k, VL(subtrie(nvl.payload, l1k * "_")))
+			end
+		end
+	end
+	vl
 end
 
-
-VL(nt::NamedTuple) = VL(pairs(nt))
-VL(;pars...)       = VL(pairs(pars))
+# gets 1st level keys
+function l1keys(vl::VL)
+	l1k = Set{String}()
+	for k in keys(vl.payload)
+		ks = split(k, "_")
+		push!(l1k, ks[1])
+	end
+	l1k
+end
 
 
 include("io.jl")
 
-## conversion to a tree (a dict of dicts)
-
-function totree(vl::VL)
-  kdict = Dict{String,Any}()
-  for k in sort(keys(vl.payload))
-    ks = split(k, "_")
-    # build dict tree if no set yet
-    pardict = kdict
-    for k2 in ks[1:end-1]
-      if ! haskey(pardict, k2)
-        pardict[k2] = Dict{String,Any}()
-      end
-      pardict = pardict[k2]
-    end
-
-    # set value
-    v = vl.payload[k]
-    kend = ks[end]
-    if isa(v, Values)
-      pardict[kend] = v
-    elseif isa(v, Vector)
-      pardict[kend] = totree(v)
-    else
-      @warn "unanticipated case : v is a $(typeof(v))"
-    end
-  end
-  kdict
-end
-
-totree(e::Values)     = e
-totree(e::NamedTuple) = e
-totree(v::Vector) = map(totree, v)
 
 ## functions amending the structure
 
-function insert!(vl::VL, index, item::Union{Values, Vector, VL})
+# insert at index in vl
+
+Base.insert!(vl::VL, index, item::NamedTuple) =
+	insert!(vl, index, VL(;pairs(item)...))
+
+function Base.insert!(vl::VL, index, item::Union{Values, Vector, VL})
   # leaf already existing => add to vector or create vector
   if haskey(vl.payload, index)
     if isa(vl.payload[index], Vector)
@@ -109,32 +97,29 @@ function insert!(vl::VL, index, item::Union{Values, Vector, VL})
   vl
 end
 
-function getproperty(vl::VL, sym::Symbol)
+
+
+function Base.getproperty(vl::VL, sym::Symbol)
   (sym == :payload) && return getfield(vl, :payload)
 
   function (pargs...; nargs...)
-		# if there are multiple args, all should have a name (always true for
-		# named arguments, but true for positional arguments iif they are VL or
-		#  Namedtuples)
-		if (length(pargs)+length(nargs) > 1)
-			all( isa.(pargs, Union{VL, NamedTuple}) ) ||
-				@error "non-named argument(s) not allowed if more than one argument"
-		end
+		# single, non-named argument
+		if (length(pargs)==1) && (length(nargs)==0) && isa(pargs[1], Union{Values, Vector})
+			insert!(vl, String(sym), pargs[1])
 
-		for pa in pargs
-			svl = isa(pa, NamedTuple) ? VL(pa) : pa # NT into VL,unchanged otherwise
-			insert!(vl, String(sym), svl)
+		else
+			# if there are multiple args, all should have a name (always true for
+			# named arguments, but true for positional arguments only if they are VL or
+			#  NamedTuples)
+			# all( isa.(pargs, Union{VL, NamedTuple}) ) ||
+			# 	@error "non-named argument(s) not allowed if more than one argument"
+			#
+			insert!(vl, String(sym), VL(pargs...;nargs...))
 		end
-
-		if ( length(nargs) > 0 )
-			insert!(vl, String(sym), VL(;nargs...))
-		end
-
-    vl
   end
 end
 
-getproperty(::Type{VL}, sym::Symbol) = getproperty(VL(), sym)
+# Base.getproperty(::Type{VL}, sym::Symbol) = getproperty(VL(), sym)
 
 
 ## helper funcs
