@@ -1,7 +1,7 @@
 module VegaLiteAltSyntax
 
 using VegaLite
-
+using Dates
 
 import DataStructures: Trie, subtrie, keys_with_prefix
 # import Base: getproperty, show
@@ -68,8 +68,15 @@ include("io.jl")
 
 # insert at index in vl
 
+# NamedTuples into VL structs
 Base.insert!(vl::VL, index, item::NamedTuple) =
 	insert!(vl, index, VL(;pairs(item)...))
+
+# Dates into Strings
+Base.insert!(vl::VL, index, item::Date) =
+	insert!(vl, index, Dates.format(Date(2020), "yyyy-mm-dd"))
+Base.insert!(vl::VL, index, item::DateTime) =
+	insert!(vl, index, Dates.format(Date(2020), "yyyy-mm-ddTHH:MM:SS"))
 
 function Base.insert!(vl::VL, index, item::Union{Values, Vector, VL})
   # leaf already existing => add to vector or create vector
@@ -81,6 +88,7 @@ function Base.insert!(vl::VL, index, item::Union{Values, Vector, VL})
     end
 
   # there is already a branch on index
+  # TODO use 1st level of index instead of index ?
   elseif length(keys_with_prefix(vl.payload, index * "_")) > 0
     prefix = index * "_"
     vl.payload[index] = VecValues[ VL(subtrie(vl.payload, prefix)), item ]  # create vector with subtrie
