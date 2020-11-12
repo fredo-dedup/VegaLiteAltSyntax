@@ -17,23 +17,14 @@ function totree(vl::VL)
       pardict = pardict[k2]
     end
 
-    # set value
-    v = vl.payload[k]
-    kend = ks[end]
-    if isa(v, Values)
-      pardict[kend] = v
-    elseif isa(v, Vector)
-      pardict[kend] = totree(v)
-    else
-      @warn "unanticipated case : v is a $(typeof(v))"
-    end
+    pardict[ks[end]] = totree(vl.payload[k])
   end
   kdict
 end
 
-totree(e::Values)     = e
-totree(e::NamedTuple) = e
+totree(e::LeafType)   = e
 totree(v::Vector) = map(totree, v)
+totree(e::NamedTuple) = e
 
 
 
@@ -45,10 +36,10 @@ end
 
 function printtree(io::IO, subtree::Union{NamedTuple, Dict, Vector}; indent=0)
   for (k,v) in pairs(subtree)
-    if isa(v, Values)
+    if isa(v, LeafType)
       println(io, " " ^ indent, k, " : ", v)
 
-    elseif isa(v, Vector) && all( e -> isa(e, Values), v ) # vector printable on one line
+    elseif isa(v, Vector) && all( e -> isa(e, LeafType), v ) # vector printable on one line
       rs = repr(v)
       if length(rs) > 50
         rs = rs[1:50] * "..."

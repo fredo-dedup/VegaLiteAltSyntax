@@ -3,23 +3,31 @@ module VegaLiteAltSyntax
 using VegaLite
 using Dates
 
+import Tables
 import DataStructures: Trie, subtrie, keys_with_prefix
 # import Base: getproperty, show
 
 export VL, quantitative, ordinal, temporal, nominal, getproperty
 
 
-## the struct
+## the VL struct
 
-const Values    = Union{String, Symbol, Number, Nothing}
+# this will help limit what goes into the spec tree
+const LeafType = Union{
+	String,
+	Symbol,
+	Number,
+	Date, DateTime, Time,
+	Nothing
+}
 
 struct VL
-  payload::Trie{Union{Values, Vector}}
+  payload::Trie{Union{LeafType, Vector}}
 end
 
-const VecValues = Union{Values, Vector, NamedTuple, VL}
+const VecValues = Union{LeafType, Vector, NamedTuple, VL}
 
-# single arg case (not caught by named args function apparently)
+# single arg case (not caught by named args function below apparently)
 VL(vl::VL) = vl
 VL(nt::NamedTuple) = VL(;pairs(nt)...)
 
@@ -27,8 +35,9 @@ VL(nt::NamedTuple) = VL(;pairs(nt)...)
 function VL(pargs...;nargs...)
 	all( isa.(pargs, Union{VL, NamedTuple}) ) ||
 		@error "non-named argument(s) not allowed"
+    # TODO : catch errors and show helpful message
 
-	vl = VL( Trie{Union{Values, Vector}}() )
+	vl = VL( Trie{Union{LeafType, Vector}}() )
 
 	# add named arguments if any
 	for (k,v) in pairs(nargs)
@@ -72,13 +81,7 @@ include("io.jl")
 Base.insert!(vl::VL, index, item::NamedTuple) =
 	insert!(vl, index, VL(;pairs(item)...))
 
-# Dates into Strings
-Base.insert!(vl::VL, index, item::Date) =
-	insert!(vl, index, Dates.format(Date(2020), "yyyy-mm-dd"))
-Base.insert!(vl::VL, index, item::DateTime) =
-	insert!(vl, index, Dates.format(Date(2020), "yyyy-mm-ddTHH:MM:SS"))
-
-function Base.insert!(vl::VL, index, item::Union{Values, Vector, VL})
+function Base.insert!(vl::VL, index, item::Union{LeafType, Vector, VL})
   # leaf already existing => add to vector or create vector
   if haskey(vl.payload, index)
     if isa(vl.payload[index], Vector)
@@ -100,7 +103,7 @@ function Base.insert!(vl::VL, index, item::Union{Values, Vector, VL})
       vl.payload[index * "_" * k] = item.payload[k]
     end
 
-  elseif isa(item, Union{Values, Vector})
+  elseif isa(item, Union{LeafType, Vector})
     vl.payload[index] = item
 
   else
@@ -110,24 +113,33 @@ function Base.insert!(vl::VL, index, item::Union{Values, Vector, VL})
   vl
 end
 
+## let's try to accept rowtables
+
+function Base.insert!(vl::VL, index, item::Any)
+  Base.insert!(vl, index, Tables.rowtable(item))
+  # TODO : catch errors and show helpful message
+end
 
 
+## make the VL().sym1().sym2() syntax work
 function Base.getproperty(vl::VL, sym::Symbol)
-	# treat VL fieldname :payload as it should
+  # treat VL fieldname :payload as it should
   (sym == :payload) && return getfield(vl, :payload)
 
   function (pargs...; nargs...)
 		# single, non-named argument
-		if (length(pargs)==1) && (length(nargs)==0) && isa(pargs[1], Union{Values, Vector})
-			insert!(vl, String(sym), pargs[1])
-
+		if (length(pargs)==1) && (length(nargs)==0)
+			a = pargs[1]
+			if a isa Union{LeafType, Vector}
+				insert!(vl, String(sym), a)
+			elseif a isa VL
+				insert!(vl, String(sym), a)
+			elseif a isa NamedTuple
+				insert!(vl, String(sym), VL(a))
+			else  # last chance try to turn it into a row table
+				insert!(vl, String(sym), a)
+			end
 		else
-			# if there are multiple args, all should have a name (always true for
-			# named arguments, but true for positional arguments only if they are VL or
-			#  NamedTuples)
-			# all( isa.(pargs, Union{VL, NamedTuple}) ) ||
-			# 	@error "non-named argument(s) not allowed if more than one argument"
-			#
 			insert!(vl, String(sym), VL(pargs...;nargs...))
 		end
   end
@@ -144,7 +156,7 @@ end
 
 function Base.getproperty(vlt::Type{VL}, sym::Symbol)
 	# treat DataType fieldnames as usual
-  (sym in fieldnames(DataType)) && return getfield(vlt, sym)
+	(sym in fieldnames(DataType)) && return getfield(vlt, sym)
 
 	# create new VL
 	getproperty(VL(), sym)

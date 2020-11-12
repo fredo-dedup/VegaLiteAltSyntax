@@ -124,8 +124,16 @@ Dict(pairs(ttt))
 using Distributions
 dat = [ (x=rand(LogNormal(1., 0.2)),) for i in 1:1000 ]
 
-include("src/VegaLiteAltSyntax.jl")
+include("VegaLiteAltSyntax.jl")
 VL = VegaLiteAltSyntax.VL
+
+
+VegaLiteAltSyntax.totree(VL(test=(a=Date(2020),)))
+
+
+String(Date(2020))
+Dates.format(Date(2020), "yyyy-mm-dd")
+Dates.format(DateTime(2020), "yyyy-mm-ddTHH:MM:SS")
 
 
 using VegaLiteAltSyntax
